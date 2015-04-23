@@ -3,7 +3,7 @@ module Barrb
     attr_writer :on_change
 
     def initialize(options, &block)
-      @interval = options[:interval]
+      @options = options
       output_loop(&block) if block_given?
     end
 
@@ -16,7 +16,9 @@ module Barrb
     end
 
     def start
-      @loop_thread = Thread.new(&method(:run))
+      @loop_thread = Thread.new do
+        catch(:stop) { run }
+      end
     end
 
     def stop
@@ -27,28 +29,41 @@ module Barrb
       @loop_thread.join
     end
 
-    private
+    protected
 
     def should_stop?
       @should_stop
     end
 
-    def run_loop_and_notify
-      throw(:stop) if should_stop?
-      output = @output_loop.call
-      @on_change.call(output) if @last_output != output
+    def loop_output
+      @output_loop.call
+    end
+
+    def notify_change(output)
+      @on_change.call(output)
       @last_output = output
     end
 
+    def time
+      started = Time.now
+      yield
+      Time.now - started
+    end
+
+    def process_loop
+      time do
+        output = loop_output
+        notify_change(output) if @last_output != output
+      end
+    end
+
     def run
-      catch(:stop) do
-        loop do
-          started = Time.now
-          run_loop_and_notify
-          break if @interval == :once
-          execution_time = Time.now - started
-          sleep(@interval - execution_time) if execution_time < @interval
-        end
+      loop do
+        break if should_stop?
+        execution_time = time { process_loop }
+        break if @options[:interval] == :once
+        next if execution_time >= @options[:interval]
+        sleep(@options[:interval] - execution_time)
       end
     end
   end

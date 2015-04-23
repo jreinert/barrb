@@ -12,4 +12,10 @@ Barrb::Writer.new('dzen2 -ta r') do
   segment interval: 5.seconds do
     Time.now.strftime('%H:%M:%S')
   end
+
+  insert ' | '
+
+  scroll_segment interval: :once, width: 20 do
+    'A very long string that needs some scrolling'
+  end
 end
